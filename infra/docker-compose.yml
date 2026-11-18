@@ -1,0 +1,64 @@
+# Ambiente local: PostgreSQL + pgAdmin (I02).
+# Backend e frontend entram em I03 e I04.
+# Uso: veja infra/README.md. As variáveis vêm de infra/.env.
+
+name: registro-demandas
+
+services:
+  db:
+    image: postgres:17.12
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?defina POSTGRES_DB em infra/.env}
+      POSTGRES_USER: ${POSTGRES_USER:?defina POSTGRES_USER em infra/.env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD em infra/.env}
+      APP_DB_USER: ${APP_DB_USER:?defina APP_DB_USER em infra/.env}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?defina APP_DB_PASSWORD em infra/.env}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      # Scripts executados só na primeira subida, com o volume vazio.
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      # Exposto só na máquina local, para testes fora do Compose (T03).
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  pgadmin:
+    image: dpage/pgadmin4:9.19
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:?defina PGADMIN_DEFAULT_EMAIL em infra/.env}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:?defina PGADMIN_DEFAULT_PASSWORD em infra/.env}
+      PGADMIN_CONFIG_UPGRADE_CHECK_ENABLED: "False"
+    configs:
+      - source: pgadmin-servers
+        target: /pgadmin4/servers.json
+    ports:
+      - "127.0.0.1:${PGADMIN_PORT:-5050}:80"
+    depends_on:
+      db:
+        condition: service_healthy
+
+configs:
+  # Servidor já cadastrado no pgAdmin; a senha é pedida no primeiro acesso.
+  pgadmin-servers:
+    content: |
+      {
+        "Servers": {
+          "1": {
+            "Name": "Registro de Demandas (local)",
+            "Group": "Servers",
+            "Host": "db",
+            "Port": 5432,
+            "MaintenanceDB": "${POSTGRES_DB}",
+            "Username": "${POSTGRES_USER}",
+            "SSLMode": "prefer"
+          }
+        }
+      }
+
+volumes:
+  db-data:
